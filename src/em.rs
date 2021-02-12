@@ -1,18 +1,17 @@
 extern crate ndarray;
 extern crate ndarray_image;
-extern crate ndarray_linalg;
 
 // use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
-use ndarray::{Array, Axis, Array2, Array1, Dim, s};
+use ndarray::{Array, Axis, Array2, Array1, Dim, s, Zip};
 use ndarray_rand::{RandomExt, SamplingStrategy};
 use ndarray_image::{open_image, Colors};
-use numpy::{IntoPyArray, PyArrayDyn, PyReadonlyArrayDyn, PyArray, PyArray2, PyArray1, PyArray3, ToPyArray};
+use numpy::{
+    PyArray2, PyArray1, PyArray3, ToPyArray
+};
 
-use std::f64::consts::PI;
-// use std::f32::consts::E;
-use ndarray_rand::rand_distr::num_traits::real::Real;
+use std::f32::consts::PI;
 
 #[pymodule]
 pub fn em(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
@@ -47,38 +46,66 @@ impl EM {
     //
     // }
 
-    fn _maximum_likelihood_for_loop(&mut self) -> Array2<f32> {
-        let sh = self.img.img_arr.shape();
-        let (n, d) = (sh[0], sh[1]);  // d is 3
-        let mut likelihood: Array2<f32> = Array::zeros((n, self.k));
-        for k in 0..self.k {  // this loop can be moved out
-            for col in 0..d {
-                let mut slice = likelihood.slice_mut(s![.., k]);
-                let inner_left = (2.0 * PI * self.sigma[k]).sqrt().ln();
-                let val = self.img.img_arr.index_axis(Axis(1), col).
-                    mapv(|e| e-self.mu[[k, col]]). // subtract mean
-                    mapv(|e| e.powi(2)).  // to the power of 2
-                    mapv(|e| e / (2*self.sigma[k])).  // divide by sigma
-                    mapv(|e| e + inner_left);  // add the left part (single val)
-                slice += val;
-            }
-            let mut slice = likelihood.slice_mut(s![.., k]);
-            let tmp = self.pi[k].ln();
-            slice.mapv_inplace(|e| tmp - e);
-        }
-        likelihood
-        // let max_likelihood = likelihood.map_axis(Axis(1), |e| *e.iter().max().unwrap());
-        // let replicated_max = Array2::from_shape_fn((n, k), |(i, j)| max_likelihood[i]);
-        // likelihood = likelihood - replicated_max;
-
-    }
+    // fn _maximum_likelihood_for_loop(&mut self) -> Array2<f32> {
+    //     let sh = self.img.img_arr.shape();
+    //     let (n, d) = (sh[0], sh[1]);  // d is 3
+    //     let mut likelihood: Array2<f32> = Array::zeros((n, self.k as usize));
+    //     for k in 0..self.k {  // this loop can be moved out
+    //         for col in 0..d {
+    //             let inner_left = (2.0 * PI * self.sigma[k as usize]).sqrt().ln();
+    //             let val: Array1<f32> = self.img.img_arr.index_axis(Axis(1), col).
+    //                 mapv(|e| e-self.mu[[k as usize, col]]). // subtract mean
+    //                 mapv(|e| e.powi(2)).  // to the power of 2
+    //                 mapv(|e| e / (2_f32*self.sigma[k as usize])).  // divide by sigma
+    //                 mapv(|e| e + inner_left);  // add the left part (single val)
+    //             // let mut slice = likelihood.slice_mut(s![.., k as usize]);
+    //             // slice += val;
+    //             Zip::from(&mut likelihood.column_mut(k as usize))
+    //                 .and(&val)
+    //                 .apply(|e, &v| {
+    //                     *e += v;
+    //                 });
+    //         }
+    //         let mut slice = likelihood.slice_mut(s![.., k as usize]);
+    //         let tmp = self.pi[k as usize].ln();
+    //         slice.mapv_inplace(|e| tmp - e);
+    //     }
+    //     likelihood
+    //     // let max_likelihood = likelihood.map_axis(Axis(1), |e| *e.iter().max().unwrap());
+    //     // let replicated_max = Array2::from_shape_fn((n, k), |(i, j)| max_likelihood[i]);
+    //     // likelihood = likelihood - replicated_max;
+    //
+    // }
 
     // ================================================================
     // ======================== Python Called =========================
     // ================================================================
 
     fn _maximum_likelihood_py_wrap<'py>(&mut self, _py: Python<'py>) -> &'py PyArray2<f32> {
-        self._maximum_likelihood_for_loop().to_pyarray(_py)
+        let sh = self.img.img_arr.shape();
+        let (n, d) = (sh[0], sh[1]);  // d is 3
+        let mut likelihood: Array2<f32> = Array::zeros((n, self.k as usize));
+        for k in 0..self.k {  // this loop can be moved out
+            for col in 0..d {
+                let inner_left = (2.0 * PI * self.sigma[k as usize]).sqrt().ln();
+                let val: Array1<f32> = self.img.img_arr.index_axis(Axis(1), col).
+                    mapv(|e| e-self.mu[[k as usize, col]]). // subtract mean
+                    mapv(|e| e.powi(2)).  // to the power of 2
+                    mapv(|e| e / (2_f32*self.sigma[k as usize])).  // divide by sigma
+                    mapv(|e| e + inner_left);  // add the left part (single val)
+                // let mut slice = likelihood.slice_mut(s![.., k as usize]);
+                // slice += val;
+                Zip::from(&mut likelihood.column_mut(k as usize))
+                    .and(&val)
+                    .apply(|e, &v| {
+                        *e += v;
+                    });
+            }
+            let mut slice = likelihood.slice_mut(s![.., k as usize]);
+            let tmp = self.pi[k as usize].ln();
+            slice.mapv_inplace(|e| tmp - e);
+        }
+        likelihood.to_pyarray(_py)
     }
 
     // ================================================================
@@ -119,7 +146,7 @@ impl EM {
     // ================================================================
 
     // Useful for reading the image in python without needing PIL
-    fn read_image<'py>(&mut self, _py: Python<'py>, path: String) -> &'py PyArray3<f32> {
+    fn read_image<'py>(&mut self, _py: Python<'py>, path: String) -> &'py PyArray3<u8> {
         let img = open_image(path, Colors::Rgb).expect("Unable to open input image");
         let tmp = ndarray::ArrayView3::from(&img);
         tmp.to_pyarray(_py)
