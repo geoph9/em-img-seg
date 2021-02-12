@@ -13,6 +13,7 @@ numpy = "0.13"
 ndarray-image = "0.3.0"
 ndarray-rand = "0.13.0"
 ndarray-linalg = "0.12.1"
+ndarray-stats = "0.4.0"
 #rulinalg="0.4.2"
 
 [dependencies.pyo3]

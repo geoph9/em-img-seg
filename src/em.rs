@@ -11,7 +11,9 @@ use numpy::{
     PyArray2, PyArray1, PyArray3, ToPyArray
 };
 
-use std::f32::consts::PI;
+use std::f32::consts::{PI};
+// use ndarray_rand::rand_distr::num_traits::real::Real;
+use ndarray_stats::QuantileExt;
 
 #[pymodule]
 pub fn em(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
@@ -81,7 +83,7 @@ impl EM {
     // ======================== Python Called =========================
     // ================================================================
 
-    fn _maximum_likelihood_py_wrap<'py>(&mut self, _py: Python<'py>) -> &'py PyArray2<f32> {
+    fn _maximum_likelihood(&mut self, _py: Python) -> PyResult<f32> {// &'py PyArray2<f32> {
         let sh = self.img.img_arr.shape();
         let (n, d) = (sh[0], sh[1]);  // d is 3
         let mut likelihood: Array2<f32> = Array::zeros((n, self.k as usize));
@@ -95,17 +97,24 @@ impl EM {
                     mapv(|e| e + inner_left);  // add the left part (single val)
                 // let mut slice = likelihood.slice_mut(s![.., k as usize]);
                 // slice += val;
+                // println!(" K: {:?}, COL: {:?}", k, col);
                 Zip::from(&mut likelihood.column_mut(k as usize))
                     .and(&val)
                     .apply(|e, &v| {
                         *e += v;
                     });
             }
-            let mut slice = likelihood.slice_mut(s![.., k as usize]);
             let tmp = self.pi[k as usize].ln();
+            let mut slice = likelihood.slice_mut(s![.., k as usize]);
             slice.mapv_inplace(|e| tmp - e);
         }
-        likelihood.to_pyarray(_py)
+        let axis_max: Array1<f32> = likelihood.map_axis(Axis(1), |e| *e.max().unwrap());
+        let replicated_max: Array2<f32> = Array2::from_shape_fn((n, self.k as usize), |(i, _)| axis_max[i]);
+        likelihood = likelihood - replicated_max;
+        likelihood.mapv_inplace(|e| e.exp());
+        let tmp: Array1<f32> = likelihood.sum_axis(Axis(1)).map(|e| e.ln()) + axis_max;
+        Ok(tmp.sum())
+        // likelihood.to_pyarray(_py)
     }
 
     // ================================================================
@@ -161,8 +170,8 @@ fn _init(img2d: &Array2<f32>, k: u8) -> (Array2<f32>, Array1<f32>, Array2<f32>, 
     // Sample k rows from the image data without replacement (a row cannot be repeated)
     let mu = img2d.sample_axis(Axis(0), k as usize, SamplingStrategy::WithoutReplacement);
     // Sigma is a diagonal array which we will represent as a 1d array
-    let img_flattened_var: Array1<f32> = img2d.var_axis(Axis(0), 0.0);
-    let sigma: Array1<f32> = 0.1 * img_flattened_var;
+    let img_flattened_var: f32 = (img2d.var_axis(Axis(1), 0.0)).var_axis(Axis(0), 0.0).into_scalar();
+    let sigma: Array1<f32> = Array::from_elem((k as usize,), 0.1 * img_flattened_var);
     (gamma, pi, mu, sigma)
 }
 
