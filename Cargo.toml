@@ -12,7 +12,8 @@ ndarray = "0.14.0"
 numpy = "0.13"
 ndarray-image = "0.3.0"
 ndarray-rand = "0.13.0"
-rulinalg="0.4.2"
+ndarray-linalg = "0.12.1"
+#rulinalg="0.4.2"
 
 [dependencies.pyo3]
 version = "0.13.1"
