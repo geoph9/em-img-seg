@@ -44,45 +44,6 @@ impl EM {
     // ======================== EM FUNCTIONS ==========================
     // ================================================================
 
-    // fn fit() {
-    //
-    // }
-
-    // fn _maximum_likelihood_for_loop(&mut self) -> Array2<f32> {
-    //     let sh = self.img.img_arr.shape();
-    //     let (n, d) = (sh[0], sh[1]);  // d is 3
-    //     let mut likelihood: Array2<f32> = Array::zeros((n, self.k as usize));
-    //     for k in 0..self.k {  // this loop can be moved out
-    //         for col in 0..d {
-    //             let inner_left = (2.0 * PI * self.sigma[k as usize]).sqrt().ln();
-    //             let val: Array1<f32> = self.img.img_arr.index_axis(Axis(1), col).
-    //                 mapv(|e| e-self.mu[[k as usize, col]]). // subtract mean
-    //                 mapv(|e| e.powi(2)).  // to the power of 2
-    //                 mapv(|e| e / (2_f32*self.sigma[k as usize])).  // divide by sigma
-    //                 mapv(|e| e + inner_left);  // add the left part (single val)
-    //             // let mut slice = likelihood.slice_mut(s![.., k as usize]);
-    //             // slice += val;
-    //             Zip::from(&mut likelihood.column_mut(k as usize))
-    //                 .and(&val)
-    //                 .apply(|e, &v| {
-    //                     *e += v;
-    //                 });
-    //         }
-    //         let mut slice = likelihood.slice_mut(s![.., k as usize]);
-    //         let tmp = self.pi[k as usize].ln();
-    //         slice.mapv_inplace(|e| tmp - e);
-    //     }
-    //     likelihood
-    //     // let max_likelihood = likelihood.map_axis(Axis(1), |e| *e.iter().max().unwrap());
-    //     // let replicated_max = Array2::from_shape_fn((n, k), |(i, j)| max_likelihood[i]);
-    //     // likelihood = likelihood - replicated_max;
-    //
-    // }
-
-    // ================================================================
-    // ======================== Python Called =========================
-    // ================================================================
-
     fn _maximum_likelihood(&mut self, _py: Python) -> PyResult<f32> {// &'py PyArray2<f32> {
         let sh = self.img.img_arr.shape();
         let (n, d) = (sh[0], sh[1]);  // d is 3
@@ -115,6 +76,46 @@ impl EM {
         let tmp: Array1<f32> = likelihood.sum_axis(Axis(1)).map(|e| e.ln()) + axis_max;
         Ok(tmp.sum())
         // likelihood.to_pyarray(_py)
+    }
+
+    fn _estep(&mut self, _py: Python) {
+        println!("ESTEP");
+        let n = self.img.img_arr.shape()[0];
+        // NxK array
+        let mut s: Array2<f32> = Array::zeros((n, self.k as usize));
+        for k in 0..self.k as usize {
+            for col in 0..3 {
+                let inner_left = (2.0 * PI * self.sigma[k]).sqrt().ln();
+                let val: Array1<f32> = self.img.img_arr.index_axis(Axis(1), col).
+                    mapv(|e| e-self.mu[[k, col]]). // subtract mean
+                    mapv(|e| e.powi(2)).  // to the power of 2
+                    mapv(|e| e / (2_f32*self.sigma[k])).  // divide by sigma
+                    mapv(|e| e + inner_left);  // add the left part (single val)
+                Zip::from(&mut s.column_mut(k))
+                    .and(&val)
+                    .apply(|e, &v| {
+                        *e += v;
+                    });
+            }
+            let tmp = self.pi[k].ln();
+            let mut slice = s.slice_mut(s![.., k]);
+            slice.mapv_inplace(|e| tmp - e);
+        }
+        s.mapv_inplace(|e| e.exp());
+        let row_sum: Array1<f32> = s.sum_axis(Axis(1));
+        self.gamma = Array2::from_shape_fn((n, self.k as usize), |(i, j)| s[[i, j]] / row_sum[i]);
+    }
+
+    fn mstep(&mut self, _py: Python) {
+        println!("MSTEP");
+    }
+
+    // ================================================================
+    // ======================== Python Called =========================
+    // ================================================================
+
+    fn fit(&mut self, _py: Python, epochs: u8) {
+        let tol = 1e-6;
     }
 
     // ================================================================
@@ -162,6 +163,16 @@ impl EM {
     }
 }
 
+// fn _estep_helper(em: EM, k: usize) -> Array1<f32> {
+//     let inner_left = (2.0 * PI * em.sigma[k]).sqrt().ln();
+//     let val: Array1<f32> = em.img.img_arr.index_axis(Axis(1), col).
+//         mapv(|e| e-em.mu[[k, col]]). // subtract mean
+//         mapv(|e| e.powi(2)).  // to the power of 2
+//         mapv(|e| e / (2_f32*em.sigma[k])).  // divide by sigma
+//         mapv(|e| e + inner_left);  // add the left part (single val)
+//     val
+// }
+
 // returns initialized gamma, pi, mu, sigma
 fn _init(img2d: &Array2<f32>, k: u8) -> (Array2<f32>, Array1<f32>, Array2<f32>, Array1<f32>) {
     let n = img2d.len();
@@ -171,7 +182,7 @@ fn _init(img2d: &Array2<f32>, k: u8) -> (Array2<f32>, Array1<f32>, Array2<f32>, 
     let mu = img2d.sample_axis(Axis(0), k as usize, SamplingStrategy::WithoutReplacement);
     // Sigma is a diagonal array which we will represent as a 1d array
     let img_flattened_var: f32 = (img2d.var_axis(Axis(1), 0.0)).var_axis(Axis(0), 0.0).into_scalar();
-    let sigma: Array1<f32> = Array::from_elem((k as usize,), 0.1 * img_flattened_var);
+    let sigma: Array1<f32> = Array::from_elem((k as usize,), 10f32 * img_flattened_var);
     (gamma, pi, mu, sigma)
 }
 
