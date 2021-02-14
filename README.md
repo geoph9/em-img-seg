@@ -41,6 +41,11 @@ The output can bee seen in the image below:
 - Left: The initial image.
 - Right: The new image after using only 32 colors.
 
+The same image with `k=64` components is:
+![k=64 output](images/output_k64.jpg)
+
+As you can see the image is now more improved and the colors are way less than the initial number.
+
 ## Performance
 
 I used [`hyperfine`](https://github.com/sharkdp/hyperfine) for measuring the performance of the pure python implementation 
