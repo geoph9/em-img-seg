@@ -1,6 +1,6 @@
 import numpy as np
 
-from .rustem import test, butwhy, EM
+from .rustem import EM
 
 
 def restructure(em):
