@@ -135,7 +135,7 @@ impl EM {
         for epoch in progress(0..epochs) {
             self._estep(_py);
             self._mstep(_py);
-            let likelihood = self._maximum_likelihood(_py);
+            // let likelihood = self._maximum_likelihood(_py);
         }
     }
 
