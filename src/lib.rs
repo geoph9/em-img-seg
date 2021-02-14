@@ -1,7 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
-// pub mod imageio;
 pub mod em;
 
 /// A Python module implemented in Rust.

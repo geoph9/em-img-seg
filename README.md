@@ -42,6 +42,7 @@ The output can bee seen in the image below:
 - Right: The new image after using only 32 colors.
 
 The same image with `k=64` components is:
+
 ![k=64 output](images/output_k64.jpg)
 
 As you can see the image is now more improved and the colors are way less than the initial number.

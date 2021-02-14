@@ -202,16 +202,6 @@ impl EM {
     }
 }
 
-// fn _estep_helper(em: EM, k: usize) -> Array1<f32> {
-//     let inner_left = (2.0 * PI * em.sigma[k]).sqrt().ln();
-//     let val: Array1<f32> = em.img.img_arr.index_axis(Axis(1), col).
-//         mapv(|e| e-em.mu[[k, col]]). // subtract mean
-//         mapv(|e| e.powi(2)).  // to the power of 2
-//         mapv(|e| e / (2_f32*em.sigma[k])).  // divide by sigma
-//         mapv(|e| e + inner_left);  // add the left part (single val)
-//     val
-// }
-
 // returns initialized gamma, pi, mu, sigma
 fn _init(img2d: &Array2<f32>, k: u8) -> (Array2<f32>, Array1<f32>, Array2<f32>, Array1<f32>) {
     let n = img2d.len();
