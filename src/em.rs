@@ -1,5 +1,6 @@
 extern crate ndarray;
 extern crate ndarray_image;
+extern crate progressive;
 
 // use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
@@ -8,9 +9,10 @@ use ndarray::{Array, Axis, Array2, Array1, Dim, s, Zip};
 use ndarray_rand::{RandomExt, SamplingStrategy};
 use ndarray_image::{open_image, Colors};
 use numpy::{
-    PyArray2, PyArray1, PyArray3, ToPyArray
+    PyArray2, PyArray1, PyArray3, ToPyArray, PyReadonlyArray2
 };
 
+use progressive::progress;
 use std::f32::consts::{PI};
 // use ndarray_rand::rand_distr::num_traits::real::Real;
 use ndarray_stats::QuantileExt;
@@ -48,18 +50,18 @@ impl EM {
         let sh = self.img.img_arr.shape();
         let (n, d) = (sh[0], sh[1]);  // d is 3
         let mut likelihood: Array2<f32> = Array::zeros((n, self.k as usize));
-        for k in 0..self.k {  // this loop can be moved out
+        for k in 0..self.k as usize {  // this loop can be moved out
             for col in 0..d {
-                let inner_left = (2.0 * PI * self.sigma[k as usize]).sqrt().ln();
+                let inner_left = (2.0 * PI * self.sigma[k]).sqrt().ln();
                 let val: Array1<f32> = self.img.img_arr.index_axis(Axis(1), col).
-                    mapv(|e| e-self.mu[[k as usize, col]]). // subtract mean
+                    mapv(|e| e-self.mu[[k, col]]). // subtract mean
                     mapv(|e| e.powi(2)).  // to the power of 2
-                    mapv(|e| e / (2_f32*self.sigma[k as usize])).  // divide by sigma
+                    mapv(|e| e / (2.0*self.sigma[k])).  // divide by sigma
                     mapv(|e| e + inner_left);  // add the left part (single val)
                 // let mut slice = likelihood.slice_mut(s![.., k as usize]);
                 // slice += val;
                 // println!(" K: {:?}, COL: {:?}", k, col);
-                Zip::from(&mut likelihood.column_mut(k as usize))
+                Zip::from(&mut likelihood.column_mut(k))
                     .and(&val)
                     .apply(|e, &v| {
                         *e += v;
@@ -130,11 +132,10 @@ impl EM {
 
     fn fit(&mut self, _py: Python, epochs: u8) {
         let tol = 1e-6;
-        for epoch in 0..epochs {
+        for epoch in progress(0..epochs) {
             self._estep(_py);
             self._mstep(_py);
             let likelihood = self._maximum_likelihood(_py);
-            println!("New likelihood: {:?}", likelihood);
         }
     }
 
@@ -169,6 +170,24 @@ impl EM {
     fn get_2d_image<'py>(&mut self, _py: Python<'py>) -> &'py PyArray2<f32> {
         let tmp = ndarray::ArrayView2::from(&self.img.img_arr);
         tmp.to_pyarray(_py)
+    }
+
+    fn convert_image<'py>(&mut self, _py: Python<'py>, arr: PyReadonlyArray2<'py, f32>, out_path: String) {
+        let arr_image: Array2<f32> = arr.to_owned_array();
+
+        let sh = self.img.img.shape();
+        let (height, width) = (sh[0] as u32, sh[1] as u32);
+        let mut img_buf = image::ImageBuffer::new(width, height);
+        for i in 0..arr_image.nrows() {
+            let color0 = (arr_image[[i, 0]] * 255.0) as u8;
+            let color1 = (arr_image[[i, 1]] * 255.0) as u8;
+            let color2 = (arr_image[[i, 2]] * 255.0) as u8;
+            let x = i as u32 % width;
+            let y = i as u32 / width;
+            let pixel = img_buf.get_pixel_mut(x, y);
+            *pixel = image::Rgb([color0, color1, color2]);
+        }
+        img_buf.save(out_path).unwrap();
     }
 
     // ================================================================
