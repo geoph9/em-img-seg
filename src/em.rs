@@ -79,7 +79,7 @@ impl EM {
     }
 
     fn _estep(&mut self, _py: Python) {
-        println!("ESTEP");
+        // println!("ESTEP");
         let n = self.img.img_arr.shape()[0];
         // NxK array
         let mut s: Array2<f32> = Array::zeros((n, self.k as usize));
@@ -106,8 +106,22 @@ impl EM {
         self.gamma = Array2::from_shape_fn((n, self.k as usize), |(i, j)| s[[i, j]] / row_sum[i]);
     }
 
-    fn mstep(&mut self, _py: Python) {
-        println!("MSTEP");
+    fn _mstep(&mut self, _py: Python) {
+        // println!("MSTEP");
+        let n = self.img.img_arr.shape()[0];
+        let sum_gamma: Array1<f32> = self.gamma.sum_axis(Axis(0));
+        for k in 0..self.k as usize {
+            let gamma_col: Array1<f32> = self.gamma.slice(s![.., k]).to_owned();
+            for d in 0..3 {
+                // Update mu
+                self.mu[[k, d]] = gamma_col.t().dot(&self.img.img_arr.slice(s![.., d])) / sum_gamma[k];
+            }
+            // Update sigma
+            let denom: f32 = 3.0 * gamma_col.sum();
+            let numerator: Array2<f32> = (self.img.img_arr.clone() - self.mu.slice(s![k, ..])).mapv(|e| e.powi(2));
+            self.sigma[k] = (gamma_col * numerator.sum_axis(Axis(1))).sum() / denom;
+        }
+        self.pi = sum_gamma.mapv(|e| e/n as f32);
     }
 
     // ================================================================
@@ -116,6 +130,12 @@ impl EM {
 
     fn fit(&mut self, _py: Python, epochs: u8) {
         let tol = 1e-6;
+        for epoch in 0..epochs {
+            self._estep(_py);
+            self._mstep(_py);
+            let likelihood = self._maximum_likelihood(_py);
+            println!("New likelihood: {:?}", likelihood);
+        }
     }
 
     // ================================================================
@@ -176,13 +196,13 @@ impl EM {
 // returns initialized gamma, pi, mu, sigma
 fn _init(img2d: &Array2<f32>, k: u8) -> (Array2<f32>, Array1<f32>, Array2<f32>, Array1<f32>) {
     let n = img2d.len();
-    let gamma: Array2<f32> = Array::zeros((n as usize, k as usize));
-    let pi: Array1<f32> = Array::from_elem((k as usize,), 1_f32/k as f32);
+    let mut gamma: Array2<f32> = Array::zeros((n as usize, k as usize));
+    let mut pi: Array1<f32> = Array::from_elem((k as usize,), 1_f32/k as f32);
     // Sample k rows from the image data without replacement (a row cannot be repeated)
-    let mu = img2d.sample_axis(Axis(0), k as usize, SamplingStrategy::WithoutReplacement);
+    let mut mu = img2d.sample_axis(Axis(0), k as usize, SamplingStrategy::WithoutReplacement);
     // Sigma is a diagonal array which we will represent as a 1d array
     let img_flattened_var: f32 = (img2d.var_axis(Axis(1), 0.0)).var_axis(Axis(0), 0.0).into_scalar();
-    let sigma: Array1<f32> = Array::from_elem((k as usize,), 10f32 * img_flattened_var);
+    let mut sigma: Array1<f32> = Array::from_elem((k as usize,), 10f32 * img_flattened_var);
     (gamma, pi, mu, sigma)
 }
 
