@@ -141,6 +141,10 @@ impl EM {
         let (height, width) = (sh[0] as u32, sh[1] as u32);
         // let max_indices = get_argmax(*self.gamma);
         let mut new_img_buf = image::ImageBuffer::new(width, height);
+        // NOTE: This is a bit slower than using np.argmax and then restructuring the image
+        //       Using hyperfine, I found this different to be around 0.03 seconds after 10 iterations
+        //       which is not so significant. Unfortunately, rust-ndarray does not include an
+        //       argmax function and so this is the best I could do.
         for (i, row) in self.gamma.axis_iter(Axis(0)).enumerate() {
             let (max_idx, _max_val) =
                 row.iter()
