@@ -136,6 +136,33 @@ impl EM {
         }
     }
 
+    fn restruct(&mut self, _py: Python, out_path: String) {
+        let sh = self.img.img.shape();
+        let (height, width) = (sh[0] as u32, sh[1] as u32);
+        // let max_indices = get_argmax(*self.gamma);
+        let mut new_img_buf = image::ImageBuffer::new(width, height);
+        for (i, row) in self.gamma.axis_iter(Axis(0)).enumerate() {
+            let (max_idx, _max_val) =
+                row.iter()
+                    .enumerate()
+                    .fold((0, row[0]), |(idx_max, val_max), (idx, val)| {
+                        if &val_max > val {
+                            (idx_max, val_max)
+                        } else {
+                            (idx, *val)
+                        }
+                    });
+            let color0 = (self.mu[[max_idx, 0]] * 255.0) as u8;
+            let color1 = (self.mu[[max_idx, 1]] * 255.0) as u8;
+            let color2 = (self.mu[[max_idx, 2]] * 255.0) as u8;
+            let x = i as u32 % width;
+            let y = i as u32 / width;
+            let pixel = new_img_buf.get_pixel_mut(x, y);
+            *pixel = image::Rgb([color0, color1, color2]);
+        }
+        new_img_buf.save(out_path).unwrap();
+    }
+
     // ================================================================
     // ========================== GETTERS =============================
     // ================================================================
@@ -197,6 +224,7 @@ impl EM {
         let tmp = ndarray::ArrayView3::from(&img);
         tmp.to_pyarray(_py)
     }
+
 }
 
 // returns initialized gamma, pi, mu, sigma
