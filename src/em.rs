@@ -1,21 +1,18 @@
-extern crate ndarray;
-extern crate ndarray_image;
-extern crate progressive;
-
 // use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
-use ndarray::{Array, Axis, Array2, Array1, Dim, s, Zip};
-use ndarray_rand::{RandomExt, SamplingStrategy};
+use ndarray::{Array, Axis, Array2, Array1, s, Zip};
 use ndarray_image::{open_image, Colors};
+use ndarray_rand::{RandomExt, SamplingStrategy};
 use numpy::{
     PyArray2, PyArray1, PyArray3, ToPyArray, PyReadonlyArray2
 };
 
 use progressive::progress;
 use std::f32::consts::{PI};
-// use ndarray_rand::rand_distr::num_traits::real::Real;
 use ndarray_stats::QuantileExt;
+
+use super::imageio::ImageIO;
 
 #[pymodule]
 pub fn em(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
@@ -131,8 +128,8 @@ impl EM {
     // ================================================================
 
     fn fit(&mut self, _py: Python, epochs: u8) {
-        let tol = 1e-6;
-        for epoch in progress(0..epochs) {
+        // let tol = 1e-6;
+        for _ in progress(0..epochs) {
             self._estep(_py);
             self._mstep(_py);
             // let likelihood = self._maximum_likelihood(_py);
@@ -213,52 +210,4 @@ fn _init(img2d: &Array2<f32>, k: u8) -> (Array2<f32>, Array1<f32>, Array2<f32>, 
     let img_flattened_var: f32 = (img2d.var_axis(Axis(1), 0.0)).var_axis(Axis(0), 0.0).into_scalar();
     let mut sigma: Array1<f32> = Array::from_elem((k as usize,), 10f32 * img_flattened_var);
     (gamma, pi, mu, sigma)
-}
-
-pub struct ImageIO {
-    img: ndarray::Array3<u8>,
-    img_arr: Array2<f32> ,
-}
-
-impl ImageIO {
-    fn new(path: String) -> Self {
-        // let img = image::open(path).unwrap();
-        // let img = open_image(path, Colors::Rgb).expect("unable to open input image");
-        let (img, img_arr) = Self::image_to_data(path);
-        // Normalized on [0, 1]
-        ImageIO {
-            img,
-            img_arr,
-        }
-    }
-
-    // Converts a split image to a normal 3d image (3rd dim is the color).
-    fn data_to_image(&mut self, out_path: String) {
-        let sh = self.img.shape();
-        let (height, width) = (sh[0] as u32, sh[1] as u32);
-        let mut img_buf = image::ImageBuffer::new(width, height);
-        for i in 0..self.img_arr.nrows() {
-            let color0 = (self.img_arr[[i, 0]] * 255.0) as u8;
-            let color1 = (self.img_arr[[i, 1]] * 255.0) as u8;
-            let color2 = (self.img_arr[[i, 2]] * 255.0) as u8;
-            let x = i as u32 % width;
-            let y = i as u32 / width;
-            let pixel = img_buf.get_pixel_mut(x, y);
-            *pixel = image::Rgb([color0, color1, color2]);
-        }
-        img_buf.save(out_path).unwrap();
-    }
-
-    // Converts a 3d image (with rgb colors) to a 2d image of dimensions Nx3 (3 is the number of colors)
-    // Also normalizes the pixels by dividing with 255
-    fn image_to_data(path: String) -> (ndarray::Array3<u8>, Array2<f32>) {
-        let img = open_image(path, Colors::Rgb).expect("unable to open input image");
-        let sh = img.shape();
-        let (height, width) = (sh[0] as u32, sh[1] as u32);
-        let n = (width * height) as usize;
-        let new_dim = Dim([n, 3]);
-        let img_vec = img.map(|&e| e as f32 / 255_f32).into_raw_vec();
-        let img_arr = Array2::from_shape_vec(new_dim, img_vec).ok().unwrap();
-        (img, img_arr)
-    }
 }
