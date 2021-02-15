@@ -18,7 +18,15 @@ since the output is a bit worse than the one from the python implementation.
 I have used `PyO3` for binding my Rust code to a python module (named `rustem`) which can be invoked as `from rustem import EM`. 
 My Rust code is definitely not the best but I am still learning.
 
-## Example Output
+## Contents
+
+- [Usage](#usage)
+- [Performance](#performance)
+    - [Pure Python Performance](#pure-python-performance)
+    - [Python with Rust Performance](#python-with-rust-performance)
+- [Installation/Using Locally](#installationusing-locally)
+
+## Usage
 
 Example script:
 ```python
@@ -79,3 +87,21 @@ Benchmark #1: python segment.py
 It took about **17** seconds to run the EM algorithm with the same hyperparameters.
 
 This means that the rust implementation is almost **3 times faster**!
+
+## Installation/Using Locally
+
+You can use `rustem` as a python library after doing the following:
+```bash
+git clone https://github.com/geoph9/em-img-seg.git
+cd em-img-seg/
+# Activate or create a new python environment
+# python -m venv env
+# . ./env/bin/activate
+python setup.py install
+```
+To build the rust library alone, run:
+```bash
+cargo build
+```
+
+If the above ran without any errors then you can now use the `rustem` module as in the example in the [Usage](#usage) section.
